@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MNIST Digit Recognition</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+  }
+  .container {
+    text-align: center;
+  }
+  h1 {
+    font-size: 1.6rem;
+    margin-bottom: 12px;
+    color: #e94560;
+  }
+  .canvas-wrapper {
+    display: inline-block;
+    border: 3px solid #e94560;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #000;
+    cursor: crosshair;
+    touch-action: none;
+  }
+  canvas { display: block; }
+  .buttons {
+    margin-top: 16px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+  button {
+    font-size: 1rem;
+    padding: 10px 28px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.2s;
+  }
+  .btn-clear { background: #555; color: #fff; }
+  .btn-clear:hover { background: #777; }
+  .btn-predict { background: #e94560; color: #fff; }
+  .btn-predict:hover { background: #ff6b81; }
+
+  .result {
+    margin-top: 20px;
+    font-size: 3rem;
+    font-weight: bold;
+  }
+  .result .digit {
+    display: inline-block;
+    background: #e94560;
+    color: #fff;
+    width: 80px;
+    height: 80px;
+    line-height: 80px;
+    border-radius: 16px;
+    margin: 0 6px;
+    animation: pop 0.3s ease;
+  }
+  @keyframes pop {
+    0% { transform: scale(0.5); opacity: 0; }
+    80% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .prob-bars {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    align-items: flex-end;
+    height: 80px;
+    margin-top: 14px;
+  }
+  .prob-bar {
+    width: 22px;
+    background: #333;
+    border-radius: 3px 3px 0 0;
+    position: relative;
+    transition: height 0.3s ease, background 0.3s;
+  }
+  .prob-bar.high { background: #e94560; }
+  .prob-label {
+    font-size: 0.6rem;
+    color: #aaa;
+    margin-top: 4px;
+  }
+  .subtitle {
+    font-size: 0.85rem;
+    color: #888;
+    margin-bottom: 20px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>MNIST Digit Recognition</h1>
+  <p class="subtitle">Draw a digit with your mouse or finger</p>
+  <div class="canvas-wrapper">
+    <canvas id="canvas" width="280" height="280"></canvas>
+  </div>
+  <div class="buttons">
+    <button class="btn-clear" onclick="clearCanvas()">Clear</button>
+    <button class="btn-predict" onclick="predict()">Predict</button>
+  </div>
+
+  <div class="result" id="result"></div>
+  <div class="prob-bars" id="probBars"></div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+ctx.fillStyle = '#000';
+ctx.fillRect(0, 0, 280, 280);
+ctx.strokeStyle = '#fff';
+ctx.lineWidth = 20;
+ctx.lineCap = 'round';
+ctx.lineJoin = 'round';
+
+let drawing = false;
+
+canvas.addEventListener('mousedown', (e) => { drawing = true; draw(e); });
+canvas.addEventListener('mousemove', (e) => { if (drawing) draw(e); });
+canvas.addEventListener('mouseup', () => drawing = false);
+canvas.addEventListener('mouseleave', () => drawing = false);
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); drawing = true; drawTouch(e); });
+canvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (drawing) drawTouch(e); });
+canvas.addEventListener('touchend', () => drawing = false);
+
+function draw(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (280 / rect.width);
+  const y = (e.clientY - rect.top) * (280 / rect.height);
+  ctx.beginPath();
+  ctx.arc(x, y, ctx.lineWidth / 2, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+}
+
+function drawTouch(e) {
+  const rect = canvas.getBoundingClientRect();
+  const touch = e.touches[0];
+  const x = (touch.clientX - rect.left) * (280 / rect.width);
+  const y = (touch.clientY - rect.top) * (280 / rect.height);
+  ctx.beginPath();
+  ctx.arc(x, y, ctx.lineWidth / 2, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+}
+
+function clearCanvas() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, 280, 280);
+  document.getElementById('result').innerHTML = '';
+  document.getElementById('probBars').innerHTML = '';
+}
+
+function getPixels() {
+  // Extract 28x28 grayscale values
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = 28;
+  offCanvas.height = 28;
+  const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+  offCtx.drawImage(canvas, 0, 0, 28, 28);
+  const imgData = offCtx.getImageData(0, 0, 28, 28);
+  const pixels = [];
+  for (let i = 0; i < 784; i++) {
+    pixels.push(imgData.data[i * 4]); // R channel = grayscale
+  }
+  return pixels;
+}
+
+async function predict() {
+  const pixels = getPixels();
+
+  try {
+    const resp = await fetch('/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pixels: pixels })
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      document.getElementById('result').innerHTML = `<span style="color:#e94560">Error: ${data.error}</span>`;
+      return;
+    }
+
+    document.getElementById('result').innerHTML = `Predicted: <span class="digit">${data.digit}</span>`;
+
+    // Show confidence bars if available
+    if (data.probs) {
+      let barsHTML = '';
+      for (let i = 0; i < 10; i++) {
+        const h = Math.max(2, data.probs[i] * 60);
+        barsHTML += `<div style="text-align:center">
+          <div class="prob-bar${data.digit === i ? ' high' : ''}" style="height:${h}px"></div>
+          <div class="prob-label">${i}</div>
+        </div>`;
+      }
+      document.getElementById('probBars').innerHTML = barsHTML;
+    }
+  } catch (err) {
+    document.getElementById('result').innerHTML = `<span style="color:#e94560">Network error</span>`;
+  }
+}
+</script>
+</body>
+</html>

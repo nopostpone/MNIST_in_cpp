@@ -33,6 +33,9 @@ _build/
 _deps/
 _fetch_*
 
+# Model weights (generated)
+model_weights.bin
+
 # Compiled binaries
 *.exe
 *.out

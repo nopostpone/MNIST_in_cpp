@@ -173,7 +173,7 @@ Eigen::MatrixXf Conv2D::backward(const Eigen::MatrixXf& dout) {
     int patch_sz = in_c_ * k_ * k_;
 
     // Reshape dout back to (out_c_, n_patches * B) — zero-copy
-    auto dout_big = const_cast<Eigen::MatrixXf&>(dout).reshaped(out_c_, n_patches * B);
+    const auto& dout_big = dout.reshaped(out_c_, n_patches * B);
 
     // Weight / bias gradients
     W_.grad.noalias() += dout_big * col_cache_.transpose();

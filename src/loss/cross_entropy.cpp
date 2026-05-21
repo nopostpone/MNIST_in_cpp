@@ -19,18 +19,10 @@ float CrossEntropyLoss::forward(const Eigen::MatrixXf& logits, const Eigen::Vect
     return total_loss;
 }
 
-Eigen::MatrixXf CrossEntropyLoss::backward(const Eigen::MatrixXf& logits, const Eigen::VectorXi& labels) {
-    int B = static_cast<int>(logits.cols());
-    int C = static_cast<int>(logits.rows());
-    Eigen::MatrixXf grad(C, B);
-
-    for (int b = 0; b < B; ++b) {
-        float shift = logits.col(b).maxCoeff();
-        Eigen::MatrixXf exp_s = (logits.col(b).array() - shift).exp();
-        float inv_sum = 1.0f / exp_s.sum();
-        grad.col(b) = exp_s * inv_sum;
+Eigen::MatrixXf CrossEntropyLoss::backward(const Eigen::MatrixXf& /*logits*/, const Eigen::VectorXi& labels) {
+    Eigen::MatrixXf grad = probs_cache_;
+    for (int b = 0; b < labels.size(); ++b)
         grad(labels(b), b) -= 1.0f;
-    }
     return grad;
 }
 

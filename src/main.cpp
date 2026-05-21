@@ -1,9 +1,7 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
-#ifdef _OPENMP
-#include <omp.h>
-#endif
+#include <cstring>
 #include "data/mnist_loader.h"
 #include "model/model.h"
 #include "model/trainer.h"
@@ -14,25 +12,7 @@
 #include "activations/relu.h"
 #include "loss/cross_entropy.h"
 
-int main() {
-#ifdef _OPENMP
-    std::cout << "OpenMP threads: " << omp_get_max_threads() << std::endl;
-#else
-    std::cout << "OpenMP: not enabled" << std::endl;
-#endif
-
-    std::cout << std::fixed << std::setprecision(4);
-    auto train_full = mnist::Loader::load_training("data", true);
-    auto test_full  = mnist::Loader::load_test("data", true);
-
-    const int n_train = 2000;
-    const int n_test  = 500;
-    mnist::Dataset train_sub, test_sub;
-    train_sub.images = train_full.images.topRows(n_train);
-    train_sub.labels = train_full.labels.head(n_train);
-    test_sub.images  = test_full.images.topRows(n_test);
-    test_sub.labels  = test_full.labels.head(n_test);
-
+static mnist::Sequential build_model() {
     mnist::Sequential model;
     model.add<mnist::Conv2D>(1, 32, 3, 1, 1, 28, 28);
     model.add<mnist::ReLU>();
@@ -44,21 +24,67 @@ int main() {
     model.add<mnist::Linear>(2304, 128);
     model.add<mnist::ReLU>();
     model.add<mnist::Linear>(128, 10);
+    return model;
+}
 
+void do_train() {
+    std::cout << "Loading MNIST..." << std::endl;
+    auto train = mnist::Loader::load_training("data", true);
+    auto test  = mnist::Loader::load_test("data", true);
+    std::cout << "Train: " << train.images.rows()
+              << "  Test: " << test.images.rows() << std::endl;
+
+    auto model = build_model();
     mnist::CrossEntropyLoss criterion;
     mnist::Trainer trainer(model, criterion, 0.001f);
 
+    std::cout << std::fixed << std::setprecision(4);
     namespace chr = std::chrono;
     auto t0 = chr::steady_clock::now();
-    auto r = trainer.train_epoch(train_sub, test_sub, 1, 64);
-    auto t1 = chr::steady_clock::now();
-    double sec = chr::duration<double>(t1 - t0).count();
 
-    std::cout << "Epoch 1 | loss: " << r.train_loss
-              << " | train_acc: " << r.train_acc
-              << " | test_acc: " << r.test_acc
-              << " | " << sec << "s"
-              << " | " << int(n_train / sec) << " samples/s" << std::endl;
+    for (int epoch = 1; epoch <= 5; ++epoch) {
+        auto r = trainer.train_epoch(train, test, epoch, 64);
+        auto t1 = chr::steady_clock::now();
+        double sec = chr::duration<double>(t1 - t0).count();
+        std::cout << "Epoch " << r.epoch
+                  << " | loss: " << r.train_loss
+                  << " | train_acc: " << r.train_acc
+                  << " | test_acc: " << r.test_acc
+                  << " | " << int(sec) << "s" << std::endl;
+        t0 = t1;
+    }
 
+    // Save trained weights
+    auto params = model.parameters();
+    mnist::save_weights(params, "model_weights.bin");
+    std::cout << "Weights saved to model_weights.bin" << std::endl;
+}
+
+void do_predict() {
+    auto model = build_model();
+    auto params = model.parameters();
+    mnist::load_weights(params, "model_weights.bin");
+
+    // Read 784 raw bytes from stdin (0-255 grayscale)
+    unsigned char buf[784];
+    std::cin.read(reinterpret_cast<char*>(buf), 784);
+
+    Eigen::MatrixXf x(784, 1);
+    const float scale = 1.0f / 255.0f;
+    for (int i = 0; i < 784; ++i)
+        x(i, 0) = static_cast<float>(buf[i]) * scale;
+
+    auto logits = model.forward(x);
+    Eigen::Index pred;
+    logits.col(0).maxCoeff(&pred);
+    std::cout << static_cast<int>(pred) << std::endl;
+}
+
+int main(int argc, char** argv) {
+    if (argc >= 2 && std::strcmp(argv[1], "predict") == 0) {
+        do_predict();
+    } else {
+        do_train();
+    }
     return 0;
 }
