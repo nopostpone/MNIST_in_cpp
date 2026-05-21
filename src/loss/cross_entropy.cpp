@@ -3,13 +3,26 @@
 
 namespace mnist {
 
-float CrossEntropyLoss::forward(const Eigen::MatrixXf& pred, int label) {
-    return -std::log(pred(label, 0) + 1e-7f);
+float CrossEntropyLoss::forward(const Eigen::MatrixXf& logits, int label) {
+    // Numerically stable softmax + NLL in one pass
+    float shift = logits.maxCoeff();
+    Eigen::MatrixXf exp_s = (logits.array() - shift).exp();
+    float sum_exp = exp_s.sum();
+    float inv_sum = 1.0f / sum_exp;
+
+    // Cache probs for backward
+    probs_cache_ = exp_s * inv_sum;
+
+    return -std::log(probs_cache_(label, 0) + 1e-12f);
 }
 
-Eigen::MatrixXf CrossEntropyLoss::backward(const Eigen::MatrixXf& pred, int label) {
-    // Combined dL/d(logits) = softmax_output - one_hot(label)
-    Eigen::MatrixXf grad = pred;
+Eigen::MatrixXf CrossEntropyLoss::backward(const Eigen::MatrixXf& logits, int label) {
+    // dL/d(logits) = softmax(logits) - one_hot(label)
+    // Recompute if forward wasn't called with same logits
+    float shift = logits.maxCoeff();
+    Eigen::MatrixXf exp_s = (logits.array() - shift).exp();
+    float inv_sum = 1.0f / exp_s.sum();
+    Eigen::MatrixXf grad = exp_s * inv_sum;
     grad(label, 0) -= 1.0f;
     return grad;
 }

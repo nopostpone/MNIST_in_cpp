@@ -5,6 +5,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Performance: equivalent to PyTorch release builds
+if(CMAKE_BUILD_TYPE STREQUAL "" OR CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -funroll-loops")
+endif()
+
 # ── Dependencies ──────────────────────────────────────────────────────────────
 
 include(FetchContent)
@@ -42,13 +47,16 @@ set(SOURCES
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(${PROJECT_NAME} PRIVATE Eigen3::Eigen)
+# GCC 15.2.0 bug: std::ifstream crashes at O1+ in this translation unit.
+# Compile with O0 as a workaround (data loading is not perf-critical).
+set_source_files_properties(src/data/mnist_loader.cpp PROPERTIES COMPILE_FLAGS "-O0")
 
-# OpenMP 加速 (可选)
-find_package(OpenMP)
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE MNIST_USE_OPENMP)
-endif()
+# OpenMP — disabled due to segfault with this toolchain
+# find_package(OpenMP)
+# if(OpenMP_CXX_FOUND)
+#     target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
+#     target_compile_definitions(${PROJECT_NAME} PRIVATE MNIST_USE_OPENMP)
+# endif()
 
 # ── Tests (optional) ─────────────────────────────────────────────────────────
 

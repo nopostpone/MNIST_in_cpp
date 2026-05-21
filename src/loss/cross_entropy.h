@@ -4,15 +4,17 @@
 namespace mnist {
 
 class CrossEntropyLoss {
+    Eigen::MatrixXf probs_cache_;  // softmax output, cached for backward
 public:
-    /// @param pred  softmax probabilities, shape (num_classes, 1)
-    /// @param label ground truth class id (0-9)
-    /// @return      scalar loss = -log(pred[label])
-    float forward(const Eigen::MatrixXf& pred, int label);
+    /// @param logits raw scores from last linear layer, shape (num_classes, 1)
+    /// @param label  ground truth class id (0-9)
+    /// @return       scalar loss = -log(softmax(logits)[label])
+    float forward(const Eigen::MatrixXf& logits, int label);
 
-    /// Combined gradient: dL/d(logits) = pred - one_hot(label)
-    /// Call this AFTER softmax — it gives gradient w.r.t. logits directly.
-    Eigen::MatrixXf backward(const Eigen::MatrixXf& pred, int label);
+    /// Combined gradient: dL/d(logits) = softmax(logits) - one_hot(label)
+    Eigen::MatrixXf backward(const Eigen::MatrixXf& logits, int label);
+
+    const Eigen::MatrixXf& probs() const { return probs_cache_; }
 };
 
 }  // namespace mnist

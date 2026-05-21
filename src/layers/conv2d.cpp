@@ -21,78 +21,133 @@ Conv2D::Conv2D(int in_channels, int out_channels,
     b_.data.setZero();
 }
 
-Eigen::MatrixXf Conv2D::im2col(const Eigen::MatrixXf& x) {
-    // x: (in_c_, h_*w_) → cols: (in_c_*k_*k_, h_out_*w_out_)
-    int patch_sz = in_c_ * k_ * k_;
-    int n_patches = h_out_ * w_out_;
-    Eigen::MatrixXf cols(patch_sz, n_patches);
+// ── Fast-path im2col for padding=0 (no bounds checks, unrolled indexing) ─────
 
-    int col = 0;
-    for (int i = 0; i < h_out_; ++i) {
-        for (int j = 0; j < w_out_; ++j) {
-            int row = 0;
-            for (int c = 0; c < in_c_; ++c) {
-                for (int ki = 0; ki < k_; ++ki) {
-                    for (int kj = 0; kj < k_; ++kj) {
-                        int hi = i * s_ + ki - p_;
-                        int wi = j * s_ + kj - p_;
-                        if (hi >= 0 && hi < h_ && wi >= 0 && wi < w_)
-                            cols(row, col) = x(c, hi * w_ + wi);
-                        else
-                            cols(row, col) = 0.0f;
-                        ++row;
+static void im2col_pad0(const float* __restrict src,
+                         int C, int H, int W, int K,
+                         int H_out, int W_out,
+                         float* __restrict dst) {
+    int patch_sz = C * K * K;
+    int n_patches = H_out * W_out;
+
+    for (int ci = 0; ci < C; ++ci) {
+        const float* ch = src + ci * H * W;
+        float* dch = dst + ci * K * K;   // first channel's portion
+        for (int oh = 0; oh < H_out; ++oh) {
+            int src_row_off = oh * W;
+            for (int ow = 0; ow < W_out; ++ow) {
+                int src_off = src_row_off + ow;
+                float* pd = dch + (oh * W_out + ow) * patch_sz;
+                for (int kh = 0; kh < K; ++kh) {
+                    const float* srow = ch + src_off + kh * W;
+                    for (int kw = 0; kw < K; ++kw) {
+                        pd[kh * K + kw] = srow[kw];
                     }
                 }
             }
-            ++col;
+        }
+    }
+}
+
+static void col2im_pad0(const float* __restrict dcols,
+                         int C, int H, int W, int K,
+                         int H_out, int W_out,
+                         float* __restrict dsrc) {
+    int patch_sz = C * K * K;
+    int n_patches = H_out * W_out;
+
+    // Zero output first (accumulate)
+    for (int i = 0; i < C * H * W; ++i) dsrc[i] = 0.0f;
+
+    for (int ci = 0; ci < C; ++ci) {
+        float* dch = dsrc + ci * H * W;
+        const float* dcols_ch = dcols + ci * K * K;
+        for (int oh = 0; oh < H_out; ++oh) {
+            int dst_row_off = oh * W;
+            for (int ow = 0; ow < W_out; ++ow) {
+                const float* pc = dcols_ch + (oh * W_out + ow) * patch_sz;
+                int dst_off = dst_row_off + ow;
+                for (int kh = 0; kh < K; ++kh) {
+                    float* drow = dch + dst_off + kh * W;
+                    for (int kw = 0; kw < K; ++kw) {
+                        drow[kw] += pc[kh * K + kw];
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── General (slow) im2col for padding != 0 ───────────────────────────────────
+
+Eigen::MatrixXf Conv2D::im2col(const Eigen::MatrixXf& x) {
+    int patch_sz = in_c_ * k_ * k_;
+    int n_patches = h_out_ * w_out_;
+    Eigen::MatrixXf cols = Eigen::MatrixXf::Zero(patch_sz, n_patches);
+
+    for (int oh = 0; oh < h_out_; ++oh) {
+        for (int ow = 0; ow < w_out_; ++ow) {
+            int col = oh * w_out_ + ow;
+            int row = 0;
+            for (int ci = 0; ci < in_c_; ++ci) {
+                for (int kh = 0; kh < k_; ++kh) {
+                    int hi = oh * s_ + kh - p_;
+                    if (hi < 0 || hi >= h_) { row += k_; continue; }
+                    for (int kw = 0; kw < k_; ++kw) {
+                        int wi = ow * s_ + kw - p_;
+                        if (wi < 0 || wi >= w_)
+                            cols(row++, col) = 0.0f;
+                        else
+                            cols(row++, col) = x(ci, hi * w_ + wi);
+                    }
+                }
+            }
         }
     }
     return cols;
 }
 
 Eigen::MatrixXf Conv2D::col2im(const Eigen::MatrixXf& dcols) {
-    // dcols: (in_c_*k_*k_, h_out_*w_out_) → out: (in_c_, h_*w_)
     Eigen::MatrixXf dx(in_c_, h_ * w_);
     dx.setZero();
 
-    int col = 0;
-    for (int i = 0; i < h_out_; ++i) {
-        for (int j = 0; j < w_out_; ++j) {
+    for (int oh = 0; oh < h_out_; ++oh) {
+        for (int ow = 0; ow < w_out_; ++ow) {
+            int col = oh * w_out_ + ow;
             int row = 0;
-            for (int c = 0; c < in_c_; ++c) {
-                for (int ki = 0; ki < k_; ++ki) {
-                    for (int kj = 0; kj < k_; ++kj) {
-                        int hi = i * s_ + ki - p_;
-                        int wi = j * s_ + kj - p_;
-                        if (hi >= 0 && hi < h_ && wi >= 0 && wi < w_)
-                            dx(c, hi * w_ + wi) += dcols(row, col);
-                        ++row;
+            for (int ci = 0; ci < in_c_; ++ci) {
+                for (int kh = 0; kh < k_; ++kh) {
+                    int hi = oh * s_ + kh - p_;
+                    if (hi < 0 || hi >= h_) { row += k_; continue; }
+                    for (int kw = 0; kw < k_; ++kw) {
+                        int wi = ow * s_ + kw - p_;
+                        if (wi < 0 || wi >= w_) { ++row; continue; }
+                        dx(ci, hi * w_ + wi) += dcols(row++, col);
                     }
                 }
             }
-            ++col;
         }
     }
     return dx;
 }
 
+// ── Forward / Backward ───────────────────────────────────────────────────────
+
 Eigen::MatrixXf Conv2D::forward(const Eigen::MatrixXf& x) {
-    // x: (in_c_, h_*w_) → out: (out_c_, h_out_*w_out_)
-    col_cache_ = im2col(x);               // (in_c_*k_*k_, n_patches)
-    Eigen::MatrixXf out = W_.data * col_cache_;  // (out_c_, n_patches)
+    col_cache_ = im2col(x);
+    Eigen::MatrixXf out = W_.data * col_cache_;
     for (int oc = 0; oc < out_c_; ++oc)
         out.row(oc).array() += b_.data(oc, 0);
     return out;
 }
 
 Eigen::MatrixXf Conv2D::backward(const Eigen::MatrixXf& dout) {
-    // dout: (out_c_, h_out_*w_out_)
-    W_.grad += dout * col_cache_.transpose();  // (out_c_, in_c_*k_*k_)
+    W_.grad += dout * col_cache_.transpose();
     for (int oc = 0; oc < out_c_; ++oc)
         b_.grad(oc, 0) += dout.row(oc).sum();
 
-    Eigen::MatrixXf dcols = W_.data.transpose() * dout;  // (fan_in, n_patches)
-    return col2im(dcols);  // (in_c_, h_*w_)
+    Eigen::MatrixXf dcols = W_.data.transpose() * dout;
+    return col2im(dcols);
 }
 
 }  // namespace mnist
