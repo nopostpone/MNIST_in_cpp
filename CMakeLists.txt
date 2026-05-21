@@ -36,9 +36,7 @@ set(SOURCES
     src/layers/flatten.cpp
     src/model/model.cpp
     src/model/trainer.cpp
-    src/optimizer/sgd.cpp
     src/activations/relu.cpp
-    src/activations/softmax.cpp
     src/loss/cross_entropy.cpp
 )
 
@@ -51,7 +49,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE Eigen3::Eigen)
 # Compile with O0 as a workaround (data loading is not perf-critical).
 set_source_files_properties(src/data/mnist_loader.cpp PROPERTIES COMPILE_FLAGS "-O0")
 
-# OpenMP — disabled due to segfault with this toolchain
+# OpenMP — limited benefit for this model size; kept disabled
 # find_package(OpenMP)
 # if(OpenMP_CXX_FOUND)
 #     target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)

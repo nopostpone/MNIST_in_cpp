@@ -11,7 +11,7 @@ class Conv2D : public Module {
     Eigen::MatrixXf col_cache_;
 
     Eigen::MatrixXf im2col(const Eigen::MatrixXf& x);
-    Eigen::MatrixXf col2im(const Eigen::MatrixXf& dcols);
+    void col2im_flat(const Eigen::MatrixXf& dcols, float* dsrc);
 public:
     Conv2D(int in_channels, int out_channels,
            int kernel_size, int stride, int padding,

@@ -1,6 +1,7 @@
 #include "model/trainer.h"
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 
 namespace mnist {
 
@@ -24,30 +25,37 @@ EpochResult Trainer::train_epoch(const Dataset& train_data,
     int   correct    = 0;
     int   n          = static_cast<int>(train_data.images.rows());
 
-    for (int i = 0; i < n; ++i) {
-        // ── Sample → (1, 784) matrix ────────────────────────────────────
-        Eigen::MatrixXf x(1, 784);
-        x = train_data.images.row(i);
+    for (int i = 0; i < n; i += batch_size) {
+        int B = std::min(batch_size, n - i);
 
-        // ── Forward: model outputs logits (10, 1) ───────────────────────
-        auto logits = model_.forward(x);
+        // Build batch input (784, B) and label vector
+        Eigen::MatrixXf batch_input(784, B);
+        Eigen::VectorXi batch_labels(B);
+        for (int j = 0; j < B; ++j) {
+            batch_input.col(j) = train_data.images.row(i + j).transpose();
+            batch_labels(j)    = train_data.labels(i + j);
+        }
 
-        int label = train_data.labels(i);
-        float loss = criterion_.forward(logits, label);
+        // Forward
+        auto logits = model_.forward(batch_input);  // (10, B)
+
+        // Loss (total over batch, not averaged)
+        float loss = criterion_.forward(logits, batch_labels);
         total_loss += loss;
 
-        // accuracy
-        Eigen::Index pred;
-        logits.col(0).maxCoeff(&pred);  // argmax works on logits
-        if (static_cast<int>(pred) == label) ++correct;
+        // Accuracy
+        for (int j = 0; j < B; ++j) {
+            Eigen::Index pred;
+            logits.col(j).maxCoeff(&pred);
+            if (static_cast<int>(pred) == batch_labels(j)) ++correct;
+        }
 
-        // ── Backward: loss → dL/d(logits) → propagate ──────────────────
-        auto dlogits = criterion_.backward(logits, label);
+        // Backward
+        auto dlogits = criterion_.backward(logits, batch_labels);
         model_.backward(dlogits);
 
-        // ── Update ──────────────────────────────────────────────────────
-        if ((i + 1) % batch_size == 0 || i == n - 1)
-            step();
+        // Update
+        step();
     }
 
     EpochResult res;
@@ -63,8 +71,8 @@ float Trainer::evaluate(const Dataset& data) {
     int n = static_cast<int>(data.images.rows());
 
     for (int i = 0; i < n; ++i) {
-        Eigen::MatrixXf x(1, 784);
-        x = data.images.row(i);
+        Eigen::MatrixXf x(784, 1);
+        x.col(0) = data.images.row(i).transpose();
 
         auto logits = model_.forward(x);
 
