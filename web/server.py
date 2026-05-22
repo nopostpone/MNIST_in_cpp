@@ -40,8 +40,10 @@ def predict():
             timeout=5,
             cwd=PROJECT_ROOT,
         )
-        digit = proc.stdout.decode().strip()
-        return jsonify({"digit": int(digit)})
+        output = proc.stdout.decode().strip().split()
+        digit = int(output[0])
+        probs = [float(x) for x in output[1:]] if len(output) > 1 else [1.0]
+        return jsonify({"digit": digit, "probs": probs})
     except subprocess.TimeoutExpired:
         return jsonify({"error": "Prediction timed out"}), 500
     except Exception as e:

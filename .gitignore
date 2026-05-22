@@ -9,12 +9,11 @@ out/
 .idea/
 *.user
 
-# Data (binary MNIST files, model weight files)
-data/*.gz
-data/*.idx*
-data/*.bin
-data/*.pth
-data/*.onnx
+# Data (MNIST binary files)
+data/
+
+# Claude Code
+.claude/
 
 # OS
 .DS_Store

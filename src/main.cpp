@@ -75,9 +75,18 @@ void do_predict() {
         x(i, 0) = static_cast<float>(buf[i]) * scale;
 
     auto logits = model.forward(x);
+
+    // Softmax
+    float shift = logits.maxCoeff();
+    Eigen::MatrixXf exp_s = (logits.array() - shift).exp();
+    Eigen::MatrixXf probs = (exp_s / exp_s.sum()).eval();
+
     Eigen::Index pred;
-    logits.col(0).maxCoeff(&pred);
-    std::cout << static_cast<int>(pred) << std::endl;
+    probs.col(0).maxCoeff(&pred);
+    std::cout << static_cast<int>(pred);
+    for (int i = 0; i < 10; ++i)
+        std::cout << " " << probs(i, 0);
+    std::cout << std::endl;
 }
 
 int main(int argc, char** argv) {
