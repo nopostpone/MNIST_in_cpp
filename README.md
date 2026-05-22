@@ -4,7 +4,7 @@
 
 详细架构设计原理见 [docs/tutorial.md](docs/tutorial.md)。
 
-[![Static Demo](https://img.shields.io/badge/demo-live-blue)](https://nopostpone.github.io/MNIST_in_cpp/web/)
+[![Static Demo](https://img.shields.io/badge/demo-live-blue)](https://nopostpone.github.io/MNIST_in_cpp/docs/)
 
 ## 环境要求
 
@@ -32,14 +32,14 @@ cmake --build build
 
 ### 在线演示
 
-打开 [GitHub Pages 演示页](https://nopostpone.github.io/MNIST_in_cpp/web/)，直接在浏览器里手写数字，推理完全在本地 JS 引擎完成。
+打开 [GitHub Pages 演示页](https://nopostpone.github.io/MNIST_in_cpp/docs/)，直接在浏览器里手写数字，推理完全在本地 JS 引擎完成。
 
 ### 导出权重
 
 训练后导出 JSON 给静态网页用：
 
 ```bash
-./build/mnist_cpp export > web/weights.json
+./build/mnist_cpp export > docs/weights.json
 ```
 
 ## 架构
@@ -111,10 +111,9 @@ src/
 └── model/
     ├── model.*               # Sequential 容器
     └── trainer.*             # 训练循环 (mini-batch SGD)
-web/
-├── index.html                # 静态手写识别页面（纯 JS 推理）
-└── weights.json              # 模型权重
 docs/
+├── index.html                # 静态手写识别页面（纯 JS 推理）
+├── weights.json              # 模型权重
 └── tutorial.md               # 架构设计原理
 ```
 
