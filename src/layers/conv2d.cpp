@@ -154,35 +154,50 @@ Eigen::MatrixXf Conv2D::forward(const Eigen::MatrixXf& x) {
         }
     }
 
-    // One big matrix multiply
-    Eigen::MatrixXf out = W_.data * col_cache_;  // (out_c_, n_patches * B)
+    // out is (out_c_, n_patches * B) ColMajor = position-major in memory:
+    //   [oc0_p0, oc1_p0, ..., oc_{C-1}_p0, oc0_p1, oc1_p1, ...]
+    // But downstream expects channel-major:
+    //   [oc0_p0, oc0_p1, ..., oc0_p_{N-1}, oc1_p0, oc1_p1, ...]
+    // So we must reorder, NOT just resize.
 
-    // Add bias to each output channel
+    Eigen::MatrixXf out(W_.data.rows(), col_cache_.cols());
+    out.noalias() = W_.data * col_cache_;
+
+    // Add bias
     for (int oc = 0; oc < out_c_; ++oc)
         out.row(oc).array() += b_.data(oc, 0);
 
-    // Reshape to (out_c_ * n_patches, B) — zero-copy, same element count
-    out.resize(out_c_ * n_patches, B);
-    return out;
+    // Reorder: position-major → channel-major
+    Eigen::MatrixXf out_cm(out_c_ * n_patches, B);
+    for (int b = 0; b < B; ++b)
+        for (int p = 0; p < n_patches; ++p)
+            for (int oc = 0; oc < out_c_; ++oc)
+                out_cm(oc * n_patches + p, b) = out(oc, b * n_patches + p);
+
+    return out_cm;
 }
 
 Eigen::MatrixXf Conv2D::backward(const Eigen::MatrixXf& dout) {
-    // dout: (out_c_ * n_patches, B)
+    // dout: (out_c_ * n_patches, B) in channel-major
+    // Convert back to position-major (out_c_, n_patches * B)
     int B = static_cast<int>(dout.cols());
     int n_patches = h_out_ * w_out_;
     int patch_sz = in_c_ * k_ * k_;
 
-    // Reshape dout back to (out_c_, n_patches * B) — zero-copy
-    const auto& dout_big = dout.reshaped(out_c_, n_patches * B);
+    Eigen::MatrixXf dout_pm(out_c_, n_patches * B);
+    for (int b = 0; b < B; ++b)
+        for (int p = 0; p < n_patches; ++p)
+            for (int oc = 0; oc < out_c_; ++oc)
+                dout_pm(oc, b * n_patches + p) = dout(oc * n_patches + p, b);
 
     // Weight / bias gradients
-    W_.grad.noalias() += dout_big * col_cache_.transpose();
-    b_.grad += dout_big.rowwise().sum();
+    W_.grad.noalias() += dout_pm * col_cache_.transpose();
+    b_.grad += dout_pm.rowwise().sum();
 
     // Gradient w.r.t. im2col output
-    Eigen::MatrixXf dcols = W_.data.transpose() * dout_big;  // (patch_sz, n_patches*B)
+    Eigen::MatrixXf dcols = W_.data.transpose() * dout_pm;  // (patch_sz, n_patches*B)
 
-    // col2im each sample back into dx columns
+    // col2im each sample back into dx columns (channel-major)
     Eigen::MatrixXf dx(in_c_ * h_ * w_, B);
 
     if (p_ == 0) {

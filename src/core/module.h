@@ -23,6 +23,7 @@ public:
     virtual Eigen::MatrixXf forward(const Eigen::MatrixXf& x) = 0;
     virtual Eigen::MatrixXf backward(const Eigen::MatrixXf& grad) = 0;
     virtual std::vector<Parameter*> parameters() { return {}; }
+    virtual void set_training(bool) {}  // no-op by default, overridden by Dropout
 
 };
 

@@ -23,6 +23,7 @@ public:
     void backward(const Eigen::MatrixXf& grad);
 
     std::vector<Parameter*> parameters();
+    void set_training(bool t);
 };
 
 }  // namespace mnist

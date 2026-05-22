@@ -23,4 +23,8 @@ std::vector<Parameter*> Sequential::parameters() {
     return params;
 }
 
+void Sequential::set_training(bool t) {
+    for (auto& layer : layers_) layer->set_training(t);
+}
+
 }  // namespace mnist

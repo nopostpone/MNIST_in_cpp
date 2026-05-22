@@ -17,8 +17,15 @@ class Trainer {
     Sequential&        model_;
     CrossEntropyLoss&  criterion_;
     float              lr_;
+    float              momentum_ = 0.0f;
+    float              decay_    = 1.0f;
+    bool   augment_       = false;
+    float  augment_angle_ = 0.0f;
+    float  augment_scale_ = 0.0f;
+    float  augment_shift_ = 0.0f;
 
-    std::vector<Parameter*> params_;  // cached for update
+    std::vector<Parameter*> params_;           // cached for update
+    std::vector<Eigen::MatrixXf> velocity_;    // for momentum
 
 public:
     Trainer(Sequential& model, CrossEntropyLoss& criterion, float lr);
@@ -31,10 +38,16 @@ public:
     /// Evaluate accuracy on a dataset (no grad).
     float evaluate(const Dataset& data);
 
-    void set_lr(float lr) { lr_ = lr; }
+    void set_lr(float lr)         { lr_ = lr; }
+    void set_momentum(float m)    { momentum_ = m; }
+    void set_decay(float d)       { decay_ = d; }
+    void set_augment(float angle, float scale, float shift) {
+        augment_ = true; augment_angle_ = angle; augment_scale_ = scale; augment_shift_ = shift;
+    }
 
 private:
-    void step();  // update + zero_grad for one sample (online SGD)
+    void step();  // update + zero_grad
+    void augment(float* img);  // in-place data augmentation
 };
 
 }  // namespace mnist
