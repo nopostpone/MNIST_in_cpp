@@ -4,8 +4,6 @@
 
 详细架构设计原理见 [docs/tutorial.md](docs/tutorial.md)。
 
-[![Static Demo](https://img.shields.io/badge/demo-live-blue)](https://nopostpone.github.io/MNIST_in_cpp/docs/)
-
 ## 环境要求
 
 - **CMake** ≥ 3.16 + 支持的构建工具（自动下载 Eigen 3.4.0）
@@ -32,7 +30,7 @@ cmake --build build
 
 ### 在线演示
 
-打开 [GitHub Pages 演示页](https://nopostpone.github.io/MNIST_in_cpp/docs/)，直接在浏览器里手写数字，推理完全在本地 JS 引擎完成。
+打开 [GitHub Pages 演示页](https://nopostpone.github.io/MNIST_in_cpp)，直接在浏览器里手写数字，推理完全在本地 JS 引擎完成。
 
 ### 导出权重
 
