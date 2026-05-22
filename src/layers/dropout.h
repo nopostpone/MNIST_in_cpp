@@ -5,8 +5,8 @@
 namespace mnist {
 
 class Dropout : public Module {
-    float p_;                     // drop probability
-    Eigen::MatrixXf mask_;        // cached mask for backward
+    float p_;
+    Eigen::MatrixXf mask_;
     bool training_ = true;
 public:
     explicit Dropout(float p) : p_(p) {}

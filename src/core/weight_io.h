@@ -5,7 +5,7 @@
 
 namespace mnist {
 
-/// Save all parameters to a binary file (C FILE* to avoid GCC 15 O3 bug)
+/// Save all parameters to a binary file (C FILE* — GCC 15 O3 std::fstream workaround)
 inline void save_weights(const std::vector<Parameter*>& params,
                          const std::string& path) {
     FILE* f = std::fopen(path.c_str(), "wb");
@@ -22,7 +22,6 @@ inline void save_weights(const std::vector<Parameter*>& params,
     std::fclose(f);
 }
 
-/// Load all parameters from a binary file
 inline void load_weights(const std::vector<Parameter*>& params,
                          const std::string& path) {
     FILE* f = std::fopen(path.c_str(), "rb");

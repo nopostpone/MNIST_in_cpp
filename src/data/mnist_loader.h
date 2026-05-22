@@ -9,7 +9,7 @@ namespace mnist {
 
 struct Dataset {
     Eigen::MatrixXf images;  // N x 784, each row is one flattened 28x28 image
-    Eigen::VectorXi labels;  // N elements, values 0-9
+    Eigen::VectorXi labels;
 };
 
 struct Loader {

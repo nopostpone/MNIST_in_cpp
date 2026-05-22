@@ -14,7 +14,6 @@
 #include "loss/cross_entropy.h"
 #include "core/weight_io.h"
 
-// ── Sanity test: tiny dataset, 1 epoch, verify no crash + loss decreases ──
 static int run_sanity() {
     std::cout << "[" << std::endl;
     auto train_full = mnist::Loader::load_training("data", true);
@@ -28,19 +27,18 @@ static int run_sanity() {
     test_sub.images  = test_full.images.topRows(n_test);
     test_sub.labels  = test_full.labels.head(n_test);
 
-    // UCSD-style: 4 conv layers, small filters, no padding
     mnist::Sequential model;
-    model.add<mnist::Conv2D>(1, 10, 3, 1, 0, 28, 28);   // → 10×26×26
+    model.add<mnist::Conv2D>(1, 10, 3, 1, 0, 28, 28);
     model.add<mnist::ReLU>();
-    model.add<mnist::Conv2D>(10, 10, 3, 1, 0, 26, 26);   // → 10×24×24
+    model.add<mnist::Conv2D>(10, 10, 3, 1, 0, 26, 26);
     model.add<mnist::ReLU>();
-    model.add<mnist::MaxPool2D>(10, 24, 24, 2, 2);       // → 10×12×12
-    model.add<mnist::Conv2D>(10, 20, 3, 1, 0, 12, 12);   // → 20×10×10
+    model.add<mnist::MaxPool2D>(10, 24, 24, 2, 2);
+    model.add<mnist::Conv2D>(10, 20, 3, 1, 0, 12, 12);
     model.add<mnist::ReLU>();
-    model.add<mnist::Conv2D>(20, 20, 3, 1, 0, 10, 10);   // → 20×8×8
+    model.add<mnist::Conv2D>(20, 20, 3, 1, 0, 10, 10);
     model.add<mnist::ReLU>();
-    model.add<mnist::MaxPool2D>(20, 8, 8, 2, 2);         // → 20×4×4
-    model.add<mnist::Flatten>(20, 4, 4);                  // → 320
+    model.add<mnist::MaxPool2D>(20, 8, 8, 2, 2);
+    model.add<mnist::Flatten>(20, 4, 4);
     model.add<mnist::Dropout>(0.2f);
     model.add<mnist::Linear>(320, 128);
     model.add<mnist::ReLU>();
@@ -49,7 +47,6 @@ static int run_sanity() {
     mnist::CrossEntropyLoss criterion;
     mnist::Trainer trainer(model, criterion, 0.001f);
 
-    // Dry-run
     {
         Eigen::MatrixXf x(784, 1);
         x.col(0) = train_sub.images.row(0).transpose();
@@ -61,7 +58,6 @@ static int run_sanity() {
         std::cout << "  { \"dry_run\": \"ok\" }," << std::endl;
     }
 
-    // 1 epoch
     auto t0 = std::chrono::steady_clock::now();
     auto r = trainer.train_epoch(train_sub, test_sub, 1, 32);
     auto t1 = std::chrono::steady_clock::now();
@@ -96,19 +92,18 @@ static int run_sanity() {
 }
 
 static mnist::Sequential build_model() {
-    // UCSD-style: 4 conv layers, small filters, no padding
     mnist::Sequential model;
-    model.add<mnist::Conv2D>(1, 10, 3, 1, 0, 28, 28);   // → 10×26×26
+    model.add<mnist::Conv2D>(1, 10, 3, 1, 0, 28, 28);
     model.add<mnist::ReLU>();
-    model.add<mnist::Conv2D>(10, 10, 3, 1, 0, 26, 26);   // → 10×24×24
+    model.add<mnist::Conv2D>(10, 10, 3, 1, 0, 26, 26);
     model.add<mnist::ReLU>();
-    model.add<mnist::MaxPool2D>(10, 24, 24, 2, 2);       // → 10×12×12
-    model.add<mnist::Conv2D>(10, 20, 3, 1, 0, 12, 12);   // → 20×10×10
+    model.add<mnist::MaxPool2D>(10, 24, 24, 2, 2);
+    model.add<mnist::Conv2D>(10, 20, 3, 1, 0, 12, 12);
     model.add<mnist::ReLU>();
-    model.add<mnist::Conv2D>(20, 20, 3, 1, 0, 10, 10);   // → 20×8×8
+    model.add<mnist::Conv2D>(20, 20, 3, 1, 0, 10, 10);
     model.add<mnist::ReLU>();
-    model.add<mnist::MaxPool2D>(20, 8, 8, 2, 2);         // → 20×4×4
-    model.add<mnist::Flatten>(20, 4, 4);                  // → 320
+    model.add<mnist::MaxPool2D>(20, 8, 8, 2, 2);
+    model.add<mnist::Flatten>(20, 4, 4);
     model.add<mnist::Dropout>(0.2f);
     model.add<mnist::Linear>(320, 128);
     model.add<mnist::ReLU>();

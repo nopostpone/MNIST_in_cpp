@@ -22,8 +22,6 @@ Conv2D::Conv2D(int in_channels, int out_channels,
     b_.data.setZero();
 }
 
-// ── Fast-path im2col for padding=0 (no bounds checks) ────────────────────────
-
 static void im2col_pad0(const float* __restrict src,
                          int C, int H, int W, int K,
                          int H_out, int W_out,
@@ -73,8 +71,6 @@ static void col2im_pad0(const float* __restrict dcols,
         }
     }
 }
-
-// ── General (slow) im2col / col2im ───────────────────────────────────────────
 
 Eigen::MatrixXf Conv2D::im2col(const Eigen::MatrixXf& x) {
     int patch_sz = in_c_ * k_ * k_;
@@ -126,8 +122,6 @@ void Conv2D::col2im_flat(const Eigen::MatrixXf& dcols, float* dsrc) {
     }
 }
 
-// ── Forward / Backward (batch: columns = samples) ────────────────────────────
-
 Eigen::MatrixXf Conv2D::forward(const Eigen::MatrixXf& x) {
     // x: (in_c_ * h_ * w_, B)
     int B = static_cast<int>(x.cols());
@@ -163,7 +157,6 @@ Eigen::MatrixXf Conv2D::forward(const Eigen::MatrixXf& x) {
     Eigen::MatrixXf out(W_.data.rows(), col_cache_.cols());
     out.noalias() = W_.data * col_cache_;
 
-    // Add bias
     for (int oc = 0; oc < out_c_; ++oc)
         out.row(oc).array() += b_.data(oc, 0);
 
@@ -190,7 +183,6 @@ Eigen::MatrixXf Conv2D::backward(const Eigen::MatrixXf& dout) {
             for (int oc = 0; oc < out_c_; ++oc)
                 dout_pm(oc, b * n_patches + p) = dout(oc * n_patches + p, b);
 
-    // Weight / bias gradients
     W_.grad.noalias() += dout_pm * col_cache_.transpose();
     b_.grad += dout_pm.rowwise().sum();
 

@@ -260,7 +260,7 @@ function doPredict() {
   for (let i = 1; i < 10; i++) if (probs[i] > probs[best]) best = i;
 
   showResult(best, probs);
-  addToHistory(raw, best, probs[best]);
+  addToHistory(raw, processed, best, probs[best]);
 }
 
 function showResult(digit, probs) {
@@ -275,10 +275,10 @@ function showResult(digit, probs) {
 }
 
 // ── History ─────────────────────────────────────────────
-let history = []; // { pixels: [], pred: int, conf: float }
+let history = []; // { raw: [], processed: [], pred: int, conf: float }
 
-function addToHistory(raw, pred, conf) {
-  history.push({ pixels: raw.slice(), pred: pred, conf: conf });
+function addToHistory(raw, processed, pred, conf) {
+  history.push({ raw: raw.slice(), processed: processed.slice(), pred: pred, conf: conf });
   renderHistory();
 }
 
@@ -293,7 +293,7 @@ function renderHistory() {
     const mctx = mini.getContext('2d');
     const img = mctx.createImageData(28, 28);
     for (let i = 0; i < 784; i++) {
-      const v = item.pixels[i];
+      const v = item.processed[i];
       img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
       img.data[i * 4 + 3] = 255;
     }
@@ -310,13 +310,12 @@ function renderHistory() {
 
 function loadHistory(idx) {
   const item = history[idx];
-  // Load pixels into canvas
-  for (let i = 0; i < 784; i++) grid[i] = item.pixels[i] > 128 ? 1 : 0;
+  // Load raw pixels into canvas
+  for (let i = 0; i < 784; i++) grid[i] = item.raw[i] > 128 ? 1 : 0;
   render();
-  // Re-run inference to show result
-  const processed = cropAndCenter(item.pixels);
+  // Use stored preprocessed pixels for inference
   const input = new Float32Array(784);
-  for (let i = 0; i < 784; i++) input[i] = processed[i] / 255.0;
+  for (let i = 0; i < 784; i++) input[i] = item.processed[i] / 255.0;
   const probs = forward(input);
   let best = 0;
   for (let i = 1; i < 10; i++) if (probs[i] > probs[best]) best = i;
@@ -326,7 +325,7 @@ function loadHistory(idx) {
 function downloadCSV() {
   let csv = '';
   for (const item of history)
-    csv += item.pred + ',' + item.pixels.join(',') + '\n';
+    csv += item.pred + ',' + item.raw.join(',') + '\n';
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

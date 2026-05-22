@@ -81,17 +81,14 @@ EpochResult Trainer::train_epoch(const Dataset& train_data,
     int   n          = static_cast<int>(train_data.images.rows());
     int   in_dim     = static_cast<int>(train_data.images.cols());
 
-    // Apply learning rate decay
     float epoch_lr = lr_ * std::pow(decay_, epoch - 1);
 
     for (int i = 0; i < n; i += batch_size) {
         int B = std::min(batch_size, n - i);
 
-        // Build batch input (in_dim, B) and label vector
         Eigen::MatrixXf batch_input(in_dim, B);
         Eigen::VectorXi batch_labels(B);
         for (int j = 0; j < B; ++j) {
-            // Copy row, optionally augment
             Eigen::RowVectorXf row = train_data.images.row(i + j);
             float tmp[784];
             for (int k = 0; k < in_dim; ++k) tmp[k] = row(k);
@@ -100,25 +97,20 @@ EpochResult Trainer::train_epoch(const Dataset& train_data,
             batch_labels(j) = train_data.labels(i + j);
         }
 
-        // Forward
-        auto logits = model_.forward(batch_input);  // (10, B)
+        auto logits = model_.forward(batch_input);
 
-        // Loss (total over batch, not averaged)
         float loss = criterion_.forward(logits, batch_labels);
         total_loss += loss;
 
-        // Accuracy
         for (int j = 0; j < B; ++j) {
             Eigen::Index pred;
             logits.col(j).maxCoeff(&pred);
             if (static_cast<int>(pred) == batch_labels(j)) ++correct;
         }
 
-        // Backward
         auto dlogits = criterion_.backward(logits, batch_labels);
         model_.backward(dlogits);
 
-        // Update (applies momentum + lr if configured)
         for (auto* p : params_) {
             if (momentum_ > 0.0f) {
                 if (velocity_.empty()) velocity_.resize(params_.size());

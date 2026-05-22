@@ -24,8 +24,8 @@ class Trainer {
     float  augment_scale_ = 0.0f;
     float  augment_shift_ = 0.0f;
 
-    std::vector<Parameter*> params_;           // cached for update
-    std::vector<Eigen::MatrixXf> velocity_;    // for momentum
+    std::vector<Parameter*> params_;
+    std::vector<Eigen::MatrixXf> velocity_;
 
 public:
     Trainer(Sequential& model, CrossEntropyLoss& criterion, float lr);
@@ -46,7 +46,7 @@ public:
     }
 
 private:
-    void step();  // update + zero_grad
+    void step();
     void augment(float* img);  // in-place data augmentation
 };
 

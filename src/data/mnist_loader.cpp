@@ -35,7 +35,6 @@ Dataset Loader::load_test(const std::string& data_dir, bool normalize) {
 Dataset Loader::load(const std::string& image_path,
                      const std::string& label_path,
                      bool normalize) {
-    // ── Open files ──────────────────────────────────────────────────────────
     std::ifstream img_f(image_path, std::ios::binary);
     if (!img_f)
         throw std::runtime_error("Cannot open: " + image_path);
@@ -44,7 +43,6 @@ Dataset Loader::load(const std::string& image_path,
     if (!lbl_f)
         throw std::runtime_error("Cannot open: " + label_path);
 
-    // ── Parse image header ─────────────────────────────────────────────────
     uint32_t img_magic = read_big_endian_u32(img_f);
     if (img_magic != 2051)
         throw std::runtime_error("Bad image magic: " + std::to_string(img_magic));
@@ -57,7 +55,6 @@ Dataset Loader::load(const std::string& image_path,
         throw std::runtime_error("Expected 28x28 images, got " +
                                  std::to_string(n_rows) + "x" + std::to_string(n_cols));
 
-    // ── Parse label header ─────────────────────────────────────────────────
     uint32_t lbl_magic = read_big_endian_u32(lbl_f);
     if (lbl_magic != 2049)
         throw std::runtime_error("Bad label magic: " + std::to_string(lbl_magic));
@@ -68,7 +65,6 @@ Dataset Loader::load(const std::string& image_path,
         throw std::runtime_error("Image/label count mismatch: " +
                                  std::to_string(n_images) + " vs " + std::to_string(n_labels));
 
-    // ── Read pixel data ────────────────────────────────────────────────────
     constexpr int kPixels = 28 * 28;
     Dataset ds;
     ds.images.resize(n_images, kPixels);
@@ -87,7 +83,6 @@ Dataset Loader::load(const std::string& image_path,
         }
     }
 
-    // ── Read label data ────────────────────────────────────────────────────
     std::vector<unsigned char> lbl_buf(n_images);
     lbl_f.read(reinterpret_cast<char*>(lbl_buf.data()), n_images);
     if (!lbl_f)
