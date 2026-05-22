@@ -241,73 +241,40 @@ canvas.addEventListener('touchend', () => drawing = false);
 
 // ── crop & center (MNIST preprocessing) ──────────────────
 function cropAndCenter(px) {
-  // Find bounding box of non-white pixels (> 0)
+  // Find bounding box of non-white pixels
   let t = 28, b = 0, l = 28, r = 0;
+  let count = 0, sumX = 0, sumY = 0;
   for (let y = 0; y < 28; y++) {
     for (let x = 0; x < 28; x++) {
-      if (px[y * 28 + x] > 20) {  // threshold noise
+      if (px[y * 28 + x] > 20) {
         if (y < t) t = y;
         if (y > b) b = y;
         if (x < l) l = x;
         if (x > r) r = x;
+        sumX += x; sumY += y; count++;
       }
     }
   }
 
   // No content → return original
-  if (t > b || l > r) return px;
+  if (count === 0) return px;
 
-  // Expand to square, add margin
-  const MARGIN = 3;
-  t = Math.max(0, t - MARGIN);
-  b = Math.min(27, b + MARGIN);
-  l = Math.max(0, l - MARGIN);
-  r = Math.min(27, r + MARGIN);
+  // Compute center of mass
+  const cx = sumX / count;
+  const cy = sumY / count;
 
-  const bw = r - l + 1;
-  const bh = b - t + 1;
-  const sz = Math.max(bw, bh);
+  // Target center = (13.5, 13.5) for 28x28
+  const shiftX = Math.round(14 - cx);
+  const shiftY = Math.round(14 - cy);
 
-  // Center the square region
-  let cx = l + bw / 2;
-  let cy = t + bh / 2;
-  // Clip to image bounds
-  cx = Math.max(sz / 2, Math.min(28 - sz / 2, cx));
-  cy = Math.max(sz / 2, Math.min(28 - sz / 2, cy));
-
-  const srcX0 = Math.round(cx - sz / 2);
-  const srcY0 = Math.round(cy - sz / 2);
-
-  // Resize the square region to 20x20, center in 28x28
+  // Shift pixels
   const out = new Array(784).fill(0);
-  const TARGET = 20;
-  const offset = (28 - TARGET) / 2;  // 4
-
-  for (let oy = 0; oy < TARGET; oy++) {
-    for (let ox = 0; ox < TARGET; ox++) {
-      // Map output pixel to source pixel
-      const sx = srcX0 + (ox / TARGET) * sz;
-      const sy = srcY0 + (oy / TARGET) * sz;
-
-      // Bilinear interpolation
-      const ix0 = Math.floor(sx);
-      const iy0 = Math.floor(sy);
-      const ix1 = Math.min(27, ix0 + 1);
-      const iy1 = Math.min(27, iy0 + 1);
-      const fx = sx - ix0;
-      const fy = sy - iy0;
-
-      const v00 = px[iy0 * 28 + ix0];
-      const v10 = px[iy0 * 28 + ix1];
-      const v01 = px[iy1 * 28 + ix0];
-      const v11 = px[iy1 * 28 + ix1];
-
-      const val = v00 * (1 - fx) * (1 - fy) +
-                  v10 * fx * (1 - fy) +
-                  v01 * (1 - fx) * fy +
-                  v11 * fx * fy;
-
-      out[(oy + offset) * 28 + (ox + offset)] = Math.round(val);
+  for (let y = 0; y < 28; y++) {
+    for (let x = 0; x < 28; x++) {
+      const sx = x - shiftX;
+      const sy = y - shiftY;
+      if (sx >= 0 && sx < 28 && sy >= 0 && sy < 28)
+        out[y * 28 + x] = px[sy * 28 + sx];
     }
   }
   return out;
