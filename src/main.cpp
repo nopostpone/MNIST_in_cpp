@@ -11,6 +11,7 @@
 #include "layers/fully_connected.h"
 #include "activations/relu.h"
 #include "loss/cross_entropy.h"
+#include "core/weight_io.h"
 
 static mnist::Sequential build_model() {
     mnist::Sequential model;

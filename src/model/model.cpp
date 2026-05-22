@@ -23,12 +23,4 @@ std::vector<Parameter*> Sequential::parameters() {
     return params;
 }
 
-void Sequential::zero_grad() {
-    for (auto& layer : layers_) layer->zero_grad();
-}
-
-void Sequential::update(float lr) {
-    for (auto& layer : layers_) layer->update(lr);
-}
-
 }  // namespace mnist

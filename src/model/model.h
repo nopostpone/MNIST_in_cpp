@@ -23,8 +23,6 @@ public:
     void backward(const Eigen::MatrixXf& grad);
 
     std::vector<Parameter*> parameters();
-    void zero_grad();
-    void update(float lr);
 };
 
 }  // namespace mnist

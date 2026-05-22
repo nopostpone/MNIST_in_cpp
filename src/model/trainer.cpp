@@ -1,6 +1,4 @@
 #include "model/trainer.h"
-#include <iostream>
-#include <iomanip>
 #include <algorithm>
 
 namespace mnist {
@@ -24,12 +22,13 @@ EpochResult Trainer::train_epoch(const Dataset& train_data,
     float total_loss = 0;
     int   correct    = 0;
     int   n          = static_cast<int>(train_data.images.rows());
+    int   in_dim     = static_cast<int>(train_data.images.cols());
 
     for (int i = 0; i < n; i += batch_size) {
         int B = std::min(batch_size, n - i);
 
-        // Build batch input (784, B) and label vector
-        Eigen::MatrixXf batch_input(784, B);
+        // Build batch input (in_dim, B) and label vector
+        Eigen::MatrixXf batch_input(in_dim, B);
         Eigen::VectorXi batch_labels(B);
         for (int j = 0; j < B; ++j) {
             batch_input.col(j) = train_data.images.row(i + j).transpose();
@@ -69,9 +68,10 @@ EpochResult Trainer::train_epoch(const Dataset& train_data,
 float Trainer::evaluate(const Dataset& data) {
     int correct = 0;
     int n = static_cast<int>(data.images.rows());
+    int in_dim = static_cast<int>(data.images.cols());
 
     for (int i = 0; i < n; ++i) {
-        Eigen::MatrixXf x(784, 1);
+        Eigen::MatrixXf x(in_dim, 1);
         x.col(0) = data.images.row(i).transpose();
 
         auto logits = model_.forward(x);
