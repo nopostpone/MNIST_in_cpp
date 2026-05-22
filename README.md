@@ -2,7 +2,7 @@
 
 纯 C++ (Eigen, 无深度学习框架) 实现的 MNIST 手写数字识别 CNN，**98.4% 测试准确率**。
 
-详细架构设计原理见 [doc/tutorial.md](doc/tutorial.md)。
+详细架构设计原理见 [docs/tutorial.md](docs/tutorial.md)。
 
 ## 快速开始
 

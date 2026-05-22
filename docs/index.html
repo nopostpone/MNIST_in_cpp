@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MNIST Digit Recognizer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Georgia, serif; background: #fff; color: #333; display: flex; justify-content: center; padding: 24px; }
+  .container { max-width: 700px; width: 100%; text-align: center; }
+  h1 { font-size: 1.6rem; font-weight: normal; color: #2c3e50; margin-bottom: 4px; }
+  .subtitle { font-size: 0.85rem; color: #999; margin-bottom: 10px; }
+  .status { font-size: 0.8rem; color: #3498db; margin-bottom: 8px; min-height: 1.2em; }
+
+  .canvas-wrapper { display: inline-block; border: 2px solid #bbb; border-radius: 8px; overflow: hidden; background: #fff; line-height: 0; }
+  canvas.draw-area { display: block; width: 280px; height: 280px; image-rendering: pixelated; cursor: crosshair; touch-action: none; }
+
+  .controls { display: flex; gap: 10px; justify-content: center; align-items: center; margin-top: 14px; }
+  .prediction-box { display: inline-block; min-width: 56px; height: 56px; line-height: 56px; border: 3px solid #3498db; border-radius: 8px; background: #fff;
+    font-size: 2rem; font-family: 'Courier New', monospace; color: #2c3e50; padding: 0 6px; }
+  .prediction-box .conf { font-size: 0.65rem; color: #999; display: block; line-height: 0; margin-top: -12px; }
+  button { font-size: 0.85rem; padding: 7px 18px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-family: inherit; }
+  button:hover { background: #f0f0f0; }
+  button.primary { background: #3498db; color: #fff; border-color: #2980b9; }
+  button.primary:hover { background: #2980b9; }
+
+  .prob-section { display: flex; gap: 4px; justify-content: center; margin-top: 12px; height: 56px; align-items: flex-end; }
+  .prob-col { text-align: center; width: 24px; }
+  .prob-bar { width: 100%; background: #e0e0e0; border-radius: 2px 2px 0 0; transition: height 0.3s, background 0.3s; }
+  .prob-bar.top { background: #e74c3c; }
+  .prob-dig { font-size: 0.7rem; color: #999; margin-top: 2px; }
+
+  .history-section { margin-top: 24px; text-align: left; }
+  .history-section h3 { font-size: 0.9rem; font-weight: normal; color: #888; margin-bottom: 8px; }
+  .history-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+  .history-item { position: relative; width: 44px; height: 44px; border: 1px solid #ddd; cursor: pointer; }
+  .history-item:hover { border-color: #3498db; }
+  .history-item canvas { width: 100%; height: 100%; image-rendering: pixelated; }
+  .history-item .label-tag { position: absolute; bottom: 0; right: 1px; font-size: 0.5rem; color: #3498db; background: rgba(255,255,255,0.9); padding: 0 2px; }
+  .download-link { margin-top: 8px; font-size: 0.75rem; }
+  .download-link a { color: #3498db; text-decoration: none; }
+  .download-link a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>MNIST Digit Recognizer</h1>
+  <p class="subtitle">Draw a digit &mdash; 49K-param CNN runs in your browser</p>
+  <p class="status" id="status">Loading model...</p>
+
+  <div class="canvas-wrapper">
+    <canvas id="canvas" class="draw-area" width="28" height="28"></canvas>
+  </div>
+  <div class="controls">
+    <button class="primary" onclick="doPredict()">Classify</button>
+    <div class="prediction-box" id="predBox">?</div>
+    <button onclick="clearAll()">Clear</button>
+  </div>
+  <div class="prob-section" id="probSection"></div>
+
+  <div class="history-section">
+    <h3>History <span style="color:#ccc;font-size:0.7rem">(click to reload)</span></h3>
+    <div class="history-grid" id="historyGrid"></div>
+    <div class="download-link"><a href="#" onclick="downloadCSV()">Download as CSV</a></div>
+  </div>
+</div>
+
+<script>
+// ── Canvas (28×28 pixel grid) ──────────────────────────
+const W = 28, H = 28;
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+const grid = new Uint8Array(W * H);
+
+function render() {
+  const img = ctx.createImageData(W, H);
+  for (let i = 0; i < W * H; i++) {
+    const v = grid[i] ? 0 : 255;
+    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function clearAll() {
+  grid.fill(0); render();
+  document.getElementById('predBox').innerHTML = '?';
+  document.getElementById('probSection').innerHTML = '';
+}
+
+function paint(cx, cy) {
+  for (let y = Math.max(0, cy - 1); y <= Math.min(27, cy); y++)
+    for (let x = Math.max(0, cx - 1); x <= Math.min(27, cx); x++)
+      grid[y * 28 + x] = 1;
+  render();
+}
+
+let drawing = false;
+canvas.addEventListener('mousedown', e => { drawing = true; paint(Math.floor(e.offsetX / 10), Math.floor(e.offsetY / 10)); });
+canvas.addEventListener('mousemove', e => { if (drawing) paint(Math.floor(e.offsetX / 10), Math.floor(e.offsetY / 10)); });
+canvas.addEventListener('mouseup', () => drawing = false);
+canvas.addEventListener('mouseleave', () => drawing = false);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const r = canvas.getBoundingClientRect(); paint(Math.floor((e.touches[0].clientX - r.left) / 10), Math.floor((e.touches[0].clientY - r.top) / 10)); });
+canvas.addEventListener('touchmove', e => { e.preventDefault(); if (drawing) { const r = canvas.getBoundingClientRect(); paint(Math.floor((e.touches[0].clientX - r.left) / 10), Math.floor((e.touches[0].clientY - r.top) / 10)); } });
+canvas.addEventListener('touchend', () => drawing = false);
+render();
+
+// ── JS inference engine ─────────────────────────────────
+let Wconv1, bconv1, Wconv2, bconv2, Wconv3, bconv3, Wconv4, bconv4;
+let Wfc1, bfc1, Wfc2, bfc2;
+let loaded = false;
+
+// A: ColMajor (from C++ JSON), B: RowMajor, C: RowMajor
+function matmul(A, B, Ar, Ac, Bc) {
+  const C = new Float32Array(Ar * Bc);
+  for (let i = 0; i < Ar; i++)
+    for (let j = 0; j < Bc; j++) {
+      let s = 0;
+      for (let k = 0; k < Ac; k++)
+        s += A[i + k * Ar] * B[k * Bc + j]; // A ColMajor, B RowMajor
+      C[i * Bc + j] = s;
+    }
+  return C;
+}
+
+function im2col(src, C, H, Wi, K, HO, WO) { // src(C×H×Wi) → cols(C*K*K × HO*WO)
+  const patch_sz = C * K * K;
+  const cols = new Float32Array(patch_sz * HO * WO);
+  for (let ci = 0; ci < C; ci++) {
+    for (let oh = 0; oh < HO; oh++) {
+      for (let ow = 0; ow < WO; ow++) {
+        for (let kh = 0; kh < K; kh++) {
+          for (let kw = 0; kw < K; kw++) {
+            const hi = oh + kh, wi = ow + kw;
+            const src_idx = ci * H * Wi + hi * Wi + wi;
+            const dst_idx = (ci * K * K + kh * K + kw) * (HO * WO) + oh * WO + ow;
+            cols[dst_idx] = src[src_idx];
+          }
+        }
+      }
+    }
+  }
+  return cols;
+}
+
+function conv2d(src, C, H, Wi, Wt, bias, OC, K) { // → output(OC * HO * WO) channel-major
+  const HO = H - K + 1, WO = Wi - K + 1;
+  const cols = im2col(src, C, H, Wi, K, HO, WO); // (C*K*K × HO*WO)
+  const out_pm = matmul(Wt, cols, OC, C * K * K, HO * WO); // (OC × HO*WO) position-major
+  // reorder to channel-major and add bias
+  const out = new Float32Array(OC * HO * WO);
+  for (let oc = 0; oc < OC; oc++)
+    for (let p = 0; p < HO * WO; p++)
+      out[oc * HO * WO + p] = out_pm[oc * HO * WO + p] + bias[oc];
+  return out;
+}
+
+function relu(x) { for (let i = 0; i < x.length; i++) if (x[i] < 0) x[i] = 0; return x; }
+
+function maxpool2d(src, C, H, Wi, pool) {
+  const HO = Math.floor(H / pool), WO = Math.floor(Wi / pool);
+  const out = new Float32Array(C * HO * WO);
+  for (let ch = 0; ch < C; ch++) {
+    for (let i = 0; i < HO; i++) {
+      for (let j = 0; j < WO; j++) {
+        let best = -Infinity;
+        for (let pi = 0; pi < pool; pi++)
+          for (let pj = 0; pj < pool; pj++)
+            best = Math.max(best, src[ch * H * Wi + (i * pool + pi) * Wi + (j * pool + pj)]);
+        out[ch * HO * WO + i * WO + j] = best;
+      }
+    }
+  }
+  return out;
+}
+
+function linear(x, W, bias, OC) { // W: ColMajor (OC × n)
+  const n = x.length;
+  const out = new Float32Array(OC);
+  for (let i = 0; i < OC; i++) {
+    let s = bias[i];
+    for (let j = 0; j < n; j++) s += W[i + j * OC] * x[j];
+    out[i] = s;
+  }
+  return out;
+}
+
+function softmax(x) {
+  const max = Math.max(...x);
+  let sum = 0;
+  const out = new Float32Array(x.length);
+  for (let i = 0; i < x.length; i++) { out[i] = Math.exp(x[i] - max); sum += out[i]; }
+  for (let i = 0; i < x.length; i++) out[i] /= sum;
+  return out;
+}
+
+function forward(input784) { // input784: Float32Array(784) 0-1 normalized
+  let x, y;
+
+  // Conv1: 1×28×28 → 10×26×26
+  x = conv2d(input784, 1, 28, 28, Wconv1, bconv1, 10, 3);
+  x = relu(x);
+  // Conv2: 10×26×26 → 10×24×24
+  x = conv2d(x, 10, 26, 26, Wconv2, bconv2, 10, 3);
+  x = relu(x);
+  // MaxPool1: 10×24×24 → 10×12×12
+  x = maxpool2d(x, 10, 24, 24, 2);
+  // Conv3: 10×12×12 → 20×10×10
+  x = conv2d(x, 10, 12, 12, Wconv3, bconv3, 20, 3);
+  x = relu(x);
+  // Conv4: 20×10×10 → 20×8×8
+  x = conv2d(x, 20, 10, 10, Wconv4, bconv4, 20, 3);
+  x = relu(x);
+  // MaxPool2: 20×8×8 → 20×4×4 = 320
+  x = maxpool2d(x, 20, 8, 8, 2);
+  // FC1: 320 → 128
+  x = linear(x, Wfc1, bfc1, 128);
+  x = relu(x);
+  // FC2: 128 → 10
+  x = linear(x, Wfc2, bfc2, 10);
+  return softmax(x);
+}
+
+// ── Crop & center preprocessing ──────────────────────────
+function cropAndCenter(px) {
+  let t = 28, b = 0, l = 28, r = 0;
+  for (let y = 0; y < 28; y++)
+    for (let x = 0; x < 28; x++)
+      if (px[y * 28 + x] > 20) {
+        if (y < t) t = y; if (y > b) b = y; if (x < l) l = x; if (x > r) r = x;
+      }
+  if (t > b || l > r) return px;
+  t = Math.max(0, t - 2); b = Math.min(27, b + 2); l = Math.max(0, l - 2); r = Math.min(27, r + 2);
+  const bw = r - l + 1, bh = b - t + 1, sz = Math.max(bw, bh);
+  let cl = l + Math.floor((bw - sz) / 2), ct = t + Math.floor((bh - sz) / 2);
+  if (cl < 0) cl = 0; if (ct < 0) ct = 0;
+  if (cl + sz > 28) cl = 28 - sz; if (ct + sz > 28) ct = 28 - sz;
+  const TARGET = 20, PAD = 4;
+  const out = new Array(784).fill(0);
+  for (let y = 0; y < TARGET; y++)
+    for (let x = 0; x < TARGET; x++) {
+      const sx = cl + Math.floor((x / TARGET) * sz);
+      const sy = ct + Math.floor((y / TARGET) * sz);
+      out[(y + PAD) * 28 + (x + PAD)] = px[Math.min(27, sy) * 28 + Math.min(27, sx)];
+    }
+  return out;
+}
+
+// ── Predict ──────────────────────────────────────────────
+function doPredict() {
+  if (!loaded) return;
+  const raw = new Array(784);
+  for (let i = 0; i < 784; i++) raw[i] = grid[i] ? 255 : 0;
+  const processed = cropAndCenter(raw);
+  const input = new Float32Array(784);
+  for (let i = 0; i < 784; i++) input[i] = processed[i] / 255.0;
+
+  const probs = forward(input);
+  let best = 0;
+  for (let i = 1; i < 10; i++) if (probs[i] > probs[best]) best = i;
+
+  showResult(best, probs);
+  addToHistory(raw, best, probs[best]);
+}
+
+function showResult(digit, probs) {
+  const box = document.getElementById('predBox');
+  box.innerHTML = digit + '<span class="conf">' + (probs[digit] * 100).toFixed(1) + '%</span>';
+  let html = '';
+  for (let i = 0; i < 10; i++) {
+    const h = Math.max(2, probs[i] * 54);
+    html += `<div class="prob-col"><div class="prob-bar${i === digit ? ' top' : ''}" style="height:${h}px"></div><div class="prob-dig">${i}</div></div>`;
+  }
+  document.getElementById('probSection').innerHTML = html;
+}
+
+// ── History ─────────────────────────────────────────────
+let history = []; // { pixels: [], pred: int, conf: float }
+
+function addToHistory(raw, pred, conf) {
+  history.push({ pixels: raw.slice(), pred: pred, conf: conf });
+  renderHistory();
+}
+
+function renderHistory() {
+  const gridEl = document.getElementById('historyGrid');
+  gridEl.innerHTML = '';
+  history.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    const mini = document.createElement('canvas');
+    mini.width = 28; mini.height = 28;
+    const mctx = mini.getContext('2d');
+    const img = mctx.createImageData(28, 28);
+    for (let i = 0; i < 784; i++) {
+      const v = item.pixels[i];
+      img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
+      img.data[i * 4 + 3] = 255;
+    }
+    mctx.putImageData(img, 0, 0);
+    div.appendChild(mini);
+    const tag = document.createElement('span');
+    tag.className = 'label-tag';
+    tag.textContent = item.pred;
+    div.appendChild(tag);
+    div.onclick = () => loadHistory(idx);
+    gridEl.appendChild(div);
+  });
+}
+
+function loadHistory(idx) {
+  const item = history[idx];
+  // Load pixels into canvas
+  for (let i = 0; i < 784; i++) grid[i] = item.pixels[i] > 128 ? 1 : 0;
+  render();
+  // Re-run inference to show result
+  const processed = cropAndCenter(item.pixels);
+  const input = new Float32Array(784);
+  for (let i = 0; i < 784; i++) input[i] = processed[i] / 255.0;
+  const probs = forward(input);
+  let best = 0;
+  for (let i = 1; i < 10; i++) if (probs[i] > probs[best]) best = i;
+  showResult(best, probs);
+}
+
+function downloadCSV() {
+  let csv = '';
+  for (const item of history)
+    csv += item.pred + ',' + item.pixels.join(',') + '\n';
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'digits.csv';
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// ── Load weights ─────────────────────────────────────────
+async function loadWeights() {
+  try {
+    const resp = await fetch('weights.json');
+    const params = await resp.json();
+
+    const w = (i) => new Float32Array(params[i].d);
+
+    let idx = 0;
+    Wconv1 = w(idx++); bconv1 = w(idx++); // Conv1
+    Wconv2 = w(idx++); bconv2 = w(idx++); // Conv2
+    // MaxPool1 — no params
+    Wconv3 = w(idx++); bconv3 = w(idx++); // Conv3
+    Wconv4 = w(idx++); bconv4 = w(idx++); // Conv4
+    // MaxPool2 — no params
+    // Flatten — no params
+    // Dropout — no params
+    Wfc1 = w(idx++); bfc1 = w(idx++);     // Linear1
+    Wfc2 = w(idx++); bfc2 = w(idx++);     // Linear2
+
+    loaded = true;
+    document.getElementById('status').textContent = 'Model ready. Draw a digit.';
+  } catch (e) {
+    document.getElementById('status').textContent = 'Failed to load model: ' + e.message;
+  }
+}
+
+loadWeights();
+</script>
+</body>
+</html>

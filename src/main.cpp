@@ -178,11 +178,34 @@ void do_predict() {
     std::cout << std::endl;
 }
 
+void do_export() {
+    auto model = build_model();
+    auto params = model.parameters();
+    mnist::load_weights(params, "model_weights.bin");
+
+    std::cout << std::fixed << std::setprecision(6);
+    std::cout << "[";
+    for (size_t i = 0; i < params.size(); ++i) {
+        if (i > 0) std::cout << ",";
+        std::cout << "{\"r\":" << params[i]->data.rows()
+                  << ",\"c\":" << params[i]->data.cols()
+                  << ",\"d\":[";
+        for (int j = 0; j < params[i]->data.size(); ++j) {
+            if (j > 0) std::cout << ",";
+            std::cout << params[i]->data(j);
+        }
+        std::cout << "]}";
+    }
+    std::cout << "]" << std::endl;
+}
+
 int main(int argc, char** argv) {
     if (argc >= 2 && std::strcmp(argv[1], "sanity") == 0)
         return run_sanity();
     if (argc >= 2 && std::strcmp(argv[1], "predict") == 0) {
         do_predict();
+    } else if (argc >= 2 && std::strcmp(argv[1], "export") == 0) {
+        do_export();
     } else {
         do_train();
     }
