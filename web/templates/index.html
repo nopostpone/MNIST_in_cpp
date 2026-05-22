@@ -262,32 +262,45 @@ function cropAndCenter(px) {
   l = Math.max(0, l - 2);
   r = Math.min(27, r + 2);
 
-  // Make square by expanding smaller dimension
+  // Calculate scale: fit the larger dimension into 20px
   const bw = r - l + 1;
   const bh = b - t + 1;
-  const sz = Math.max(bw, bh);
-  const dx = Math.floor((sz - bw) / 2);
-  const dy = Math.floor((sz - bh) / 2);
-  l = Math.max(0, l - dx);
-  r = l + sz - 1;
-  t = Math.max(0, t - dy);
-  b = t + sz - 1;
-  // Clamp
-  if (r >= 28) { l -= (r - 27); r = 27; }
-  if (b >= 28) { t -= (b - 27); b = 27; }
-  if (l < 0) l = 0;
-  if (t < 0) t = 0;
-  const finalSz = Math.min(r - l + 1, b - t + 1);
+  const scale = 20.0 / Math.max(bw, bh);
 
-  // Nearest-neighbor resize square to 20x20, center in 28x28
-  const TARGET = 20;
-  const PAD = 4;
+  // New (scaled) width and height
+  const sw = Math.round(bw * scale);
+  const sh = Math.round(bh * scale);
+
+  // Center the scaled digit in 28x28
+  const ox = Math.floor((28 - sw) / 2);
+  const oy = Math.floor((28 - sh) / 2);
+
   const out = new Array(784).fill(0);
-  for (let oy = 0; oy < TARGET; oy++) {
-    for (let ox = 0; ox < TARGET; ox++) {
-      const sx = l + Math.floor((ox / TARGET) * finalSz);
-      const sy = t + Math.floor((oy / TARGET) * finalSz);
-      out[(oy + PAD) * 28 + (ox + PAD)] = px[Math.min(27, sy) * 28 + Math.min(27, sx)];
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
+      // Map output pixel back to source (reverse of the scale)
+      const sx = l + (x / sw) * bw;
+      const sy = t + (y / sh) * bh;
+
+      // Bilinear interpolation
+      const ix0 = Math.floor(sx);
+      const iy0 = Math.floor(sy);
+      const ix1 = Math.min(27, ix0 + 1);
+      const iy1 = Math.min(27, iy0 + 1);
+      const fx = sx - ix0;
+      const fy = sy - iy0;
+
+      const v00 = px[iy0 * 28 + ix0];
+      const v10 = px[iy0 * 28 + ix1];
+      const v01 = px[iy1 * 28 + ix0];
+      const v11 = px[iy1 * 28 + ix1];
+
+      const val = v00 * (1 - fx) * (1 - fy) +
+                  v10 * fx * (1 - fy) +
+                  v01 * (1 - fx) * fy +
+                  v11 * fx * fy;
+
+      out[(oy + y) * 28 + (ox + x)] = Math.round(val);
     }
   }
   return out;
