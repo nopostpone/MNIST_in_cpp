@@ -11,17 +11,17 @@ Trainer::Trainer(Sequential& model, CrossEntropyLoss& criterion, float lr)
     params_ = model_.parameters();
 }
 
-void Trainer::step() {
+void Trainer::step(float lr) {
     for (size_t i = 0; i < params_.size(); ++i) {
         auto* p = params_[i];
         if (momentum_ > 0.0f) {
             if (velocity_.empty()) velocity_.resize(params_.size());
             if (velocity_[i].size() == 0)
                 velocity_[i] = Eigen::MatrixXf::Zero(p->grad.rows(), p->grad.cols());
-            velocity_[i] = momentum_ * velocity_[i] + lr_ * p->grad;
+            velocity_[i] = momentum_ * velocity_[i] + lr * p->grad;
             p->data.noalias() -= velocity_[i];
         } else {
-            p->data.noalias() -= lr_ * p->grad;
+            p->data.noalias() -= lr * p->grad;
         }
         p->grad.setZero();
     }
@@ -99,8 +99,8 @@ EpochResult Trainer::train_epoch(const Dataset& train_data,
 
         auto logits = model_.forward(batch_input);
 
-        float loss = criterion_.forward(logits, batch_labels);
-        total_loss += loss;
+        auto cl = criterion_.compute(logits, batch_labels);
+        total_loss += cl.loss;
 
         for (int j = 0; j < B; ++j) {
             Eigen::Index pred;
@@ -108,22 +108,8 @@ EpochResult Trainer::train_epoch(const Dataset& train_data,
             if (static_cast<int>(pred) == batch_labels(j)) ++correct;
         }
 
-        auto dlogits = criterion_.backward(logits, batch_labels);
-        model_.backward(dlogits);
-
-        for (auto* p : params_) {
-            if (momentum_ > 0.0f) {
-                if (velocity_.empty()) velocity_.resize(params_.size());
-                size_t idx = p - params_[0];
-                if (velocity_[idx].size() == 0)
-                    velocity_[idx] = Eigen::MatrixXf::Zero(p->grad.rows(), p->grad.cols());
-                velocity_[idx] = momentum_ * velocity_[idx] + epoch_lr * p->grad;
-                p->data.noalias() -= velocity_[idx];
-            } else {
-                p->data.noalias() -= epoch_lr * p->grad;
-            }
-            p->grad.setZero();
-        }
+        model_.backward(cl.grad);
+        step(epoch_lr);
     }
 
     EpochResult res;
@@ -139,16 +125,21 @@ float Trainer::evaluate(const Dataset& data) {
     int correct = 0;
     int n = static_cast<int>(data.images.rows());
     int in_dim = static_cast<int>(data.images.cols());
+    const int batch_size = 64;
 
-    for (int i = 0; i < n; ++i) {
-        Eigen::MatrixXf x(in_dim, 1);
-        x.col(0) = data.images.row(i).transpose();
+    for (int i = 0; i < n; i += batch_size) {
+        int B = std::min(batch_size, n - i);
+        Eigen::MatrixXf batch_input(in_dim, B);
+        for (int j = 0; j < B; ++j)
+            batch_input.col(j) = data.images.row(i + j).transpose();
 
-        auto logits = model_.forward(x);
+        auto logits = model_.forward(batch_input);
 
-        Eigen::Index pred;
-        logits.col(0).maxCoeff(&pred);
-        if (static_cast<int>(pred) == data.labels(i)) ++correct;
+        for (int j = 0; j < B; ++j) {
+            Eigen::Index pred;
+            logits.col(j).maxCoeff(&pred);
+            if (static_cast<int>(pred) == data.labels(i + j)) ++correct;
+        }
     }
     return static_cast<float>(correct) / n;
 }

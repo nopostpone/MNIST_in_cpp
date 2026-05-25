@@ -46,7 +46,7 @@ public:
     }
 
 private:
-    void step();
+    void step(float lr);
     void augment(float* img);  // in-place data augmentation
 };
 

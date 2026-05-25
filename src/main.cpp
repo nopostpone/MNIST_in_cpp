@@ -14,6 +14,8 @@
 #include "loss/cross_entropy.h"
 #include "core/weight_io.h"
 
+static mnist::Sequential build_model();
+
 static int run_sanity() {
     std::cout << "[" << std::endl;
     auto train_full = mnist::Loader::load_training("data", true);
@@ -27,22 +29,7 @@ static int run_sanity() {
     test_sub.images  = test_full.images.topRows(n_test);
     test_sub.labels  = test_full.labels.head(n_test);
 
-    mnist::Sequential model;
-    model.add<mnist::Conv2D>(1, 10, 3, 1, 0, 28, 28);
-    model.add<mnist::ReLU>();
-    model.add<mnist::Conv2D>(10, 10, 3, 1, 0, 26, 26);
-    model.add<mnist::ReLU>();
-    model.add<mnist::MaxPool2D>(10, 24, 24, 2, 2);
-    model.add<mnist::Conv2D>(10, 20, 3, 1, 0, 12, 12);
-    model.add<mnist::ReLU>();
-    model.add<mnist::Conv2D>(20, 20, 3, 1, 0, 10, 10);
-    model.add<mnist::ReLU>();
-    model.add<mnist::MaxPool2D>(20, 8, 8, 2, 2);
-    model.add<mnist::Flatten>(20, 4, 4);
-    model.add<mnist::Dropout>(0.2f);
-    model.add<mnist::Linear>(320, 128);
-    model.add<mnist::ReLU>();
-    model.add<mnist::Linear>(128, 10);
+    mnist::Sequential model = build_model();
 
     mnist::CrossEntropyLoss criterion;
     mnist::Trainer trainer(model, criterion, 0.001f);
